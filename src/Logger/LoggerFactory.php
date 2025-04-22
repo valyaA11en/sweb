@@ -11,7 +11,7 @@ class LoggerFactory
     {
         $logger = new Logger('app');
 
-        $logDir = getenv('LOG_DIR') ?: __DIR__ . '/../../logs';  // Используйте переменную окружения, если необходимо
+        $logDir = getenv('LOG_DIR') ?: __DIR__ . '/../../logs';
 
         if (!is_dir($logDir)) {
             if (!mkdir($logDir, 0777, true) && !is_dir($logDir)) {
