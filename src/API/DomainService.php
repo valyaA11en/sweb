@@ -6,6 +6,7 @@ use GuzzleHttp\Exception\GuzzleException;
 
 class DomainService
 {
+    const string ERROR_DOMAIN_EXISTS = 'ОШИБКА ДОМЕНА СУЩЕСТВУЕТ';
     private ApiClient $apiClient;
     private LoggerInterface $logger;
     private TokenService $tokenService;
@@ -17,8 +18,10 @@ class DomainService
         $this->tokenService = $tokenService;
     }
 
-    public function addDomain($domain): array
+    public function addDomain(string $domain): array
     {
+        $requestId = uniqid('domain_add_', true); // Генерация уникального ID для каждого запроса
+
         try {
             $token = $this->tokenService->getToken();
 
@@ -26,15 +29,27 @@ class DomainService
                 throw new \Exception('Unable to retrieve token');
             }
 
+            $this->logger->info("Начинаем добавление домена [$requestId]", [
+                'domain' => $domain,
+                'request_id' => $requestId
+            ]);
+
             $response = $this->apiClient->sendRequest('addDomain', ['domain' => $domain]);
 
-            if ($response === null) {
-                throw new \Exception('API returned null response');
+            // Обновленная проверка
+            if ($response === null || $response === false) {
+                throw new \Exception('API returned null or false response');
             }
 
-            if (isset($response['error']) && $response['error'] === 'domain_exists') {
+            // Использование констант для ошибок
+            if (isset($response['error']) && $response['error'] === DomainService::ERROR_DOMAIN_EXISTS) {
                 throw new \Exception('The domain already exists on the account.');
             }
+
+            // Логирование успешного добавления домена после успешного завершения
+            $this->logger->info("Домен [$domain] успешно добавлен", [
+                'request_id' => $requestId
+            ]);
 
             return [
                 'success' => true,
@@ -42,19 +57,20 @@ class DomainService
             ];
 
         } catch (\Exception $e) {
-            $this->logger->error('Domain addition failed', [
+            $this->logger->error("Ошибка при добавлении домена [$requestId]", [
                 'domain' => $domain,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'request_id' => $requestId
             ]);
             throw $e;
         } catch (GuzzleException $e) {
-            $this->logger->error('Guzzle request failed', [
+            $this->logger->error("Guzzle ошибка при добавлении домена [$requestId]", [
                 'domain' => $domain,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'request_id' => $requestId
             ]);
             throw new \Exception('Guzzle request failed');
         }
     }
-
 
 }

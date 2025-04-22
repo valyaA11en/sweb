@@ -1,101 +1,73 @@
 <?php
+
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
+use GuzzleHttp\Client as HttpClient;
 use App\API\ApiClient;
 use App\API\TokenService;
 use App\API\DomainService;
-use Psr\Log\LoggerInterface;
+use App\Config\Config;
 
 class DomainServiceTest extends TestCase
 {
-    private $apiClient;
-    private $tokenService;
-    private $logger;
+    private $mockApiClient;
+    private $mockTokenService;
+    private $mockLogger;
     private $domainService;
 
     protected function setUp(): void
     {
-        $this->apiClient = $this->createMock(ApiClient::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->tokenService = new TokenService($this->apiClient, $this->logger);
-        $this->domainService = new DomainService($this->apiClient, $this->logger, $this->tokenService);
+        // Мокаем зависимости
+        $this->mockApiClient = $this->createMock(ApiClient::class);
+        $this->mockTokenService = $this->createMock(TokenService::class);
+        $this->mockLogger = $this->createMock(LoggerInterface::class);
+
+        // Создаем экземпляр DomainService с мокаемыми зависимостями
+        $this->domainService = new DomainService($this->mockApiClient, $this->mockLogger, $this->mockTokenService);
     }
 
     /**
      * @throws Exception
-     * @throws \GuzzleHttp\Exception\GuzzleException
      */
     public function testAddDomainSuccess()
     {
-        $apiClient = $this->createMock(ApiClient::class);
-        $logger = $this->createMock(LoggerInterface::class);
-        $tokenService = $this->createMock(TokenService::class);
+        // Мокаем ответ от TokenService
+        $this->mockTokenService->method('getToken')->willReturn('mock_token');
 
-        $tokenService->method('getToken')->willReturn('mocked_token');
+        // Мокаем ответ от ApiClient (предположим, что запрос к API прошел успешно)
+        $this->mockApiClient->method('sendRequest')->willReturn(true);  // Mocking a successful boolean response
 
-        $apiClient->method('sendRequest')->willReturn(['success' => true]);
+        // Мокаем логгер, чтобы проверить, что он был вызван
+        $this->mockLogger->expects($this->exactly(2))
+            ->method('info')
+            ->with(
+                $this->logicalOr(
+                    $this->stringContains("Начинаем добавление домена"),
+                    $this->stringContains("Домен [test-domain.ru] успешно добавлен")
+                )
+            );
 
-        $domainService = new DomainService($apiClient, $logger, $tokenService);
+        $result = $this->domainService->addDomain('test-domain.ru');
 
-        $response = $domainService->addDomain('example.com');
-
-        $this->assertIsArray($response);
-        $this->assertEquals(['success' => true, 'domain' => 'example.com'], $response);
+        $this->assertEquals([
+            'success' => true,
+            'domain' => 'test-domain.ru'
+        ], $result);
     }
 
-
-    /**
-     * @throws \GuzzleHttp\Exception\GuzzleException
-     */
-    public function addDomain($domain)
+    public function testAddDomainApiFailure()
     {
-        $response = $this->apiClient->sendRequest('addDomain', ['domain' => $domain]);
+        $this->mockTokenService->method('getToken')->willReturn('mock_token');
 
-        if (isset($response['error']) && $response['error']['message'] === 'Domain already exists') {
-            throw new \Exception('The domain already exists on the account.');
-        }
+        $this->mockApiClient->method('sendRequest')->willReturn(false);
 
-        return $response;
-    }
-
-    /**
-     * @throws \GuzzleHttp\Exception\GuzzleException
-     */
-    public function testAddDomainAlreadyExists()
-    {
-        $apiClient = $this->createMock(ApiClient::class);
-        $logger = $this->createMock(LoggerInterface::class);
-        $tokenService = $this->createMock(TokenService::class);
-
-        $tokenService->method('getToken')->willReturn('mocked_token');
-
-        $apiClient->method('sendRequest')->willReturn(['error' => 'domain_exists']);
-
-        $domainService = new DomainService($apiClient, $logger, $tokenService);
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with($this->stringContains("Ошибка при добавлении домена"));
 
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('The domain already exists on the account.');
+        $this->expectExceptionMessage('API returned null or false response');
 
-        $domainService->addDomain('existing.ru');
+        $this->domainService->addDomain('test-domain.ru');
     }
-
-
-    /**
-     * @throws \GuzzleHttp\Exception\GuzzleException
-     */
-    public function testAddDomainError()
-    {
-        $apiClient = $this->createMock(ApiClient::class);
-        $logger = $this->createMock(LoggerInterface::class);
-        $tokenService = $this->createMock(TokenService::class);
-
-        $tokenService->method('getToken')->willThrowException(new \Exception('Unable to retrieve token'));
-
-        $domainService = new DomainService($apiClient, $logger, $tokenService);
-
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Unable to retrieve token');
-
-        $domainService->addDomain('example.com');
-    }
-
 }

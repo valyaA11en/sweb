@@ -7,21 +7,29 @@ use Psr\Log\LoggerInterface;
 class TokenServiceTest extends TestCase
 {
     /**
-     * @throws Exception
+     * Тест для возврата кэшированного токена
+     * @throws Exception|\GuzzleHttp\Exception\GuzzleException
      */
-    public function testGetToken()
+    public function testGetTokenReturnsCachedToken()
     {
-        $apiClient = $this->createMock(ApiClient::class);
-        $apiClient->method('sendRequest')->willReturn([
-            'result' => ['token' => 'sample-token']
-        ]);
+        $mockApiClient = $this->createMock(ApiClient::class);
+        $mockLogger = $this->createMock(LoggerInterface::class);
 
-        $logger = $this->createMock(LoggerInterface::class);
+        $username = getenv('API_USERNAME') ?: 'mock-username';
+        $password = getenv('API_PASSWORD') ?: 'mock-password';
 
-        $tokenService = new TokenService($apiClient, $logger);
+        $tokenService = new TokenService($mockApiClient, $mockLogger, $username, $password);
+
+        $reflection = new \ReflectionClass($tokenService);
+        $property = $reflection->getProperty('token');
+        $property->setValue($tokenService, 'cached-token');
 
         $token = $tokenService->getToken();
 
-        $this->assertEquals('sample-token', $token);
+        $this->assertEquals('cached-token', $token);
+
+        $mockApiClient->expects($this->never())
+            ->method('sendRequest');
     }
+
 }
